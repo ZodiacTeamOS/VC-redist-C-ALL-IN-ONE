@@ -1,0 +1,125 @@
+#Requires -RunAsAdministrator
+
+<#
+.SYNOPSIS
+    Microsoft Visual C++ All-In-One Runtimes Installer
+.DESCRIPTION
+    Downloads and installs all Visual C++ Redistributable packages from 2005 to 2022
+.AUTHOR
+    Mlozix
+#>
+
+$Host.UI.RawUI.WindowTitle = "Installing Microsoft Visual C++ Runtimes by Mlozix"
+$Host.UI.RawUI.BackgroundColor = "White"
+$Host.UI.RawUI.ForegroundColor = "Blue"
+Clear-Host
+
+# GitHub release URL
+$GitHubRelease = "https://github.com/ZodiacTeamOS/VC-redist-C-ALL-IN-ONE/releases/download/x64_x86"
+
+# Define packages
+$Packages = @(
+    @{Name = "Visual C++ 2005 x86"; File = "1-vcredist_x86_C++2005.exe"; Args = "/q"; Arch = "x86"},
+    @{Name = "Visual C++ 2005 x64"; File = "1-vcredist_x64_C++2005.exe"; Args = "/q"; Arch = "x64"},
+    @{Name = "Visual C++ 2008 x86"; File = "2-vcredist_x86_C++2008.exe"; Args = "/qb"; Arch = "x86"},
+    @{Name = "Visual C++ 2008 x64"; File = "2-vcredist_x64_C++2008.exe"; Args = "/qb"; Arch = "x64"},
+    @{Name = "Visual C++ 2010 x86"; File = "3-vcredist_x86_C++2010.exe"; Args = "/passive /norestart"; Arch = "x86"},
+    @{Name = "Visual C++ 2010 x64"; File = "3-vcredist_x64_C++2010.exe"; Args = "/passive /norestart"; Arch = "x64"},
+    @{Name = "Visual C++ 2012 x86"; File = "4-vcredist_x86_C++2012.exe"; Args = "/passive /norestart"; Arch = "x86"},
+    @{Name = "Visual C++ 2012 x64"; File = "4-vcredist_x64_C++2012.exe"; Args = "/passive /norestart"; Arch = "x64"},
+    @{Name = "Visual C++ 2013 x86"; File = "5-vcredist_x86_C++2013.exe"; Args = "/passive /norestart"; Arch = "x86"},
+    @{Name = "Visual C++ 2013 x64"; File = "5-vcredist_x64_C++2013.exe"; Args = "/passive /norestart"; Arch = "x64"},
+    @{Name = "Visual C++ 2015-2022 x86"; File = "6-VC_redist.x86_C++2015-2022.exe"; Args = "/passive /norestart"; Arch = "x86"},
+    @{Name = "Visual C++ 2015-2022 x64"; File = "6-VC_redist.x64_C++2015-2022.exe"; Args = "/passive /norestart"; Arch = "x64"}
+)
+
+# Determine system architecture
+$Is64Bit = [Environment]::Is64BitOperatingSystem
+
+Write-Host ""
+Write-Host "===============================================================" -ForegroundColor Cyan
+Write-Host "   Microsoft Visual C++ All-In-One Runtimes Installer" -ForegroundColor Cyan
+Write-Host "===============================================================" -ForegroundColor Cyan
+Write-Host ""
+
+if ($Is64Bit) {
+    Write-Host "System Architecture: 64-bit (x64)" -ForegroundColor Green
+    $PackagesToInstall = $Packages
+} else {
+    Write-Host "System Architecture: 32-bit (x86)" -ForegroundColor Green
+    $PackagesToInstall = $Packages | Where-Object { $_.Arch -eq "x86" }
+}
+
+Write-Host ""
+Write-Host "Starting installation..." -ForegroundColor Yellow
+Write-Host ""
+
+# Create temp directory
+$TempDir = Join-Path $env:TEMP "VC_Runtimes_Installer"
+if (-not (Test-Path $TempDir)) {
+    New-Item -Path $TempDir -ItemType Directory -Force | Out-Null
+}
+
+$TotalSteps = $PackagesToInstall.Count
+$CurrentStep = 0
+
+foreach ($Package in $PackagesToInstall) {
+    $CurrentStep++
+    $Percent = [math]::Round(($CurrentStep / $TotalSteps) * 100)
+    
+    # Show progress bar
+    $FilledChars = [math]::Floor($Percent / 5)
+    $EmptyChars = 20 - $FilledChars
+    $ProgressBar = "█" * $FilledChars + "░" * $EmptyChars
+    
+    Write-Host ""
+    Write-Host "[$ProgressBar] $Percent% - $($Package.Name)..." -ForegroundColor Cyan
+    
+    # Download file
+    $DownloadUrl = "$GitHubRelease/$($Package.File)"
+    $LocalFile = Join-Path $TempDir $Package.File
+    
+    try {
+        Write-Host "Downloading $($Package.File)..." -ForegroundColor Yellow
+        $ProgressPreference = 'SilentlyContinue'
+        Invoke-WebRequest -Uri $DownloadUrl -OutFile $LocalFile -UseBasicParsing -ErrorAction Stop
+        $ProgressPreference = 'Continue'
+        
+        # Install package
+        Write-Host "Installing $($Package.Name)..." -ForegroundColor Yellow
+        $Process = Start-Process -FilePath $LocalFile -ArgumentList $Package.Args -Wait -PassThru -NoNewWindow
+        
+        if ($Process.ExitCode -eq 0 -or $Process.ExitCode -eq 3010) {
+            Write-Host "[✓] $($Package.Name) - Installed successfully" -ForegroundColor Green
+        } else {
+            Write-Host "[!] $($Package.Name) - Installation returned code: $($Process.ExitCode)" -ForegroundColor Yellow
+        }
+        
+        # Clean up downloaded file
+        Remove-Item $LocalFile -Force -ErrorAction SilentlyContinue
+        
+    } catch {
+        Write-Host "[✗] Error with $($Package.Name): $_" -ForegroundColor Red
+    }
+    
+    Write-Host ""
+}
+
+# Clean up temp directory
+Remove-Item $TempDir -Recurse -Force -ErrorAction SilentlyContinue
+
+# Final message
+Clear-Host
+$Host.UI.RawUI.BackgroundColor = "Black"
+$Host.UI.RawUI.ForegroundColor = "Green"
+Clear-Host
+
+Write-Host ""
+Write-Host "===============================================================" -ForegroundColor Green
+Write-Host "                  Installation Completed!" -ForegroundColor Green
+Write-Host "===============================================================" -ForegroundColor Green
+Write-Host ""
+Write-Host "All Visual C++ Runtime packages have been installed successfully." -ForegroundColor White
+Write-Host ""
+Write-Host "Press any key to exit..." -ForegroundColor Yellow
+$null = $Host.UI.RawUI.ReadKey("NoEcho,IncludeKeyDown")
