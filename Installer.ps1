@@ -1,14 +1,35 @@
-#Requires -RunAsAdministrator
-
 <#
 .SYNOPSIS
     Microsoft Visual C++ All-In-One Runtimes Installer
 .DESCRIPTION
     Downloads and installs all Visual C++ Redistributable packages from 2005 to 2022
 .NOTES
-    Run as Administrator
+    Automatically requests Administrator privileges
     Usage: irm "YOUR_GITHUB_RAW_URL/Install_all_VC_Runtimes.ps1" | iex
 #>
+
+# Check if running as Administrator
+$IsAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+
+if (-not $IsAdmin) {
+    Write-Host ""
+    Write-Host "[!] Requesting Administrator privileges..." -ForegroundColor Yellow
+    Write-Host ""
+    
+    # Get the script path
+    if ($MyInvocation.MyCommand.Path) {
+        # Script is running from a file
+        $ScriptPath = $MyInvocation.MyCommand.Path
+        Start-Process PowerShell -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$ScriptPath`"" -Verb RunAs
+    } else {
+        # Script is running from pipeline (irm | iex)
+        $ScriptContent = $MyInvocation.MyCommand.ScriptBlock.ToString()
+        $TempScript = Join-Path $env:TEMP "VC_Install_$(Get-Date -Format 'yyyyMMddHHmmss').ps1"
+        $ScriptContent | Out-File -FilePath $TempScript -Encoding UTF8 -Force
+        Start-Process PowerShell -ArgumentList "-NoProfile -ExecutionPolicy Bypass -File `"$TempScript`"" -Verb RunAs
+    }
+    exit
+}
 
 # Set console title and colors
 $Host.UI.RawUI.WindowTitle = "Microsoft Visual C++ Runtimes Installer"
@@ -42,18 +63,6 @@ function Show-Header {
 }
 
 
-
-# Check if running as Administrator
-$IsAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
-
-if (-not $IsAdmin) {
-    Write-Host ""
-    Write-Host "[!] This script must be run as Administrator!" -ForegroundColor Red
-    Write-Host "[*] Please right-click PowerShell and select 'Run as Administrator'" -ForegroundColor Yellow
-    Write-Host ""
-    Start-Sleep -Seconds 3
-    exit 1
-}
 
 Show-Header
 
