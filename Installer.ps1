@@ -41,21 +41,7 @@ function Show-Header {
     Write-Host ""
 }
 
-function Show-ProgressBar {
-    param(
-        [int]$Current,
-        [int]$Total,
-        [string]$PackageName
-    )
-    
-    $Percent = [math]::Round(($Current / $Total) * 100)
-    $FilledChars = [math]::Floor($Percent / 5)
-    $EmptyChars = 20 - $FilledChars
-    $ProgressBar = "█" * $FilledChars + "░" * $EmptyChars
-    
-    Write-Host ""
-    Write-Host "[$ProgressBar] $Percent% - $PackageName..." -ForegroundColor Cyan
-}
+
 
 # Check if running as Administrator
 $IsAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
@@ -86,36 +72,44 @@ Write-Host ""
 Write-Host "Total packages to install: $($PackagesToInstall.Count)" -ForegroundColor Yellow
 Write-Host ""
 Write-Host "Starting installation..." -ForegroundColor Yellow
-Start-Sleep -Seconds 2
+Write-Host ""
+Start-Sleep -Seconds 1
 
 # Create temp directory
 $TempDir = Join-Path $env:TEMP "VC_Runtimes_$(Get-Date -Format 'yyyyMMdd_HHmmss')"
 New-Item -Path $TempDir -ItemType Directory -Force | Out-Null
-Write-Host "Temp directory: $TempDir" -ForegroundColor DarkGray
 
 $TotalSteps = $PackagesToInstall.Count
 $CurrentStep = 0
 $SuccessCount = 0
 $FailCount = 0
 
+# Initial progress bar position
+$ProgressLine = $Host.UI.RawUI.CursorPosition.Y
+
 foreach ($Package in $PackagesToInstall) {
     $CurrentStep++
     
-    Show-ProgressBar -Current $CurrentStep -Total $TotalSteps -PackageName $Package.Name
+    # Update progress bar in place
+    $Percent = [math]::Round(($CurrentStep / $TotalSteps) * 100)
+    $FilledChars = [math]::Floor($Percent / 5)
+    $EmptyChars = 20 - $FilledChars
+    $ProgressBar = "█" * $FilledChars + "░" * $EmptyChars
+    
+    # Move cursor to progress bar line
+    $Host.UI.RawUI.CursorPosition = New-Object System.Management.Automation.Host.Coordinates(0, $ProgressLine)
+    Write-Host "[$ProgressBar] $Percent% - Installing packages...                    " -ForegroundColor Cyan
     
     $DownloadUrl = "$GitHubRelease/$($Package.File)"
     $LocalFile = Join-Path $TempDir $Package.File
     
     try {
-        # Download file
-        Write-Host "  → Downloading..." -ForegroundColor Yellow -NoNewline
+        # Download file silently
         $ProgressPreference = 'SilentlyContinue'
         Invoke-WebRequest -Uri $DownloadUrl -OutFile $LocalFile -UseBasicParsing -ErrorAction Stop
         $ProgressPreference = 'Continue'
-        Write-Host " Done" -ForegroundColor Green
         
-        # Install package
-        Write-Host "  → Installing..." -ForegroundColor Yellow -NoNewline
+        # Install package silently
         $ProcessArgs = @{
             FilePath = $LocalFile
             ArgumentList = $Package.Args
@@ -125,18 +119,18 @@ foreach ($Package in $PackagesToInstall) {
         }
         $Process = Start-Process @ProcessArgs
         
-        # Check exit code
+        # Check exit code and show result below progress bar
         if ($Process.ExitCode -eq 0 -or $Process.ExitCode -eq 3010) {
-            Write-Host " Done" -ForegroundColor Green
-            Write-Host "  [✓] $($Package.Name) installed successfully" -ForegroundColor Green
+            Write-Host ""
+            Write-Host "[✓] $($Package.Name) installed successfully" -ForegroundColor Green
             $SuccessCount++
         } elseif ($Process.ExitCode -eq 1638) {
-            Write-Host " Already Installed" -ForegroundColor Yellow
-            Write-Host "  [!] $($Package.Name) is already installed (newer version)" -ForegroundColor Yellow
+            Write-Host ""
+            Write-Host "[!] $($Package.Name) already installed (newer version)" -ForegroundColor Yellow
             $SuccessCount++
         } else {
-            Write-Host " Warning" -ForegroundColor Yellow
-            Write-Host "  [!] Exit code: $($Process.ExitCode)" -ForegroundColor Yellow
+            Write-Host ""
+            Write-Host "[!] $($Package.Name) - Exit code: $($Process.ExitCode)" -ForegroundColor Yellow
             $FailCount++
         }
         
@@ -144,8 +138,8 @@ foreach ($Package in $PackagesToInstall) {
         Remove-Item $LocalFile -Force -ErrorAction SilentlyContinue
         
     } catch {
-        Write-Host " Failed" -ForegroundColor Red
-        Write-Host "  [✗] Error: $($_.Exception.Message)" -ForegroundColor Red
+        Write-Host ""
+        Write-Host "[✗] $($Package.Name) - Failed: $($_.Exception.Message)" -ForegroundColor Red
         $FailCount++
     }
 }
